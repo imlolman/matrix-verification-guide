@@ -182,7 +182,10 @@ body {
   line-height: 1.6;
   text-rendering: optimizeLegibility;
   transition: background-color 0.25s ease, color 0.25s ease;
+  overflow-x: hidden;
 }
+html { overflow-x: hidden; }
+p, li, dd, h1, h2, h3, h4 { overflow-wrap: break-word; }
 img, svg { max-width: 100%; display: block; }
 a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 a:hover { color: var(--accent-strong); }
@@ -217,6 +220,7 @@ code {
   border-radius: 2px;
   padding: 0.05em 0.4em;
   color: var(--accent-strong);
+  overflow-wrap: anywhere;
 }
 
 .eyebrow {
