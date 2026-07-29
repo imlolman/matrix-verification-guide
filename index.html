@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Why does Element keep saying I'm not verified? — a field guide</title>
+<meta name="description" content="A beginner-friendly, visual guide to Matrix and Element's E2EE verification system: what triggers the alerts, what cross-signing actually is, whether a homeserver admin can fake it, and what you can really do about it." />
+<meta name="color-scheme" content="dark light" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0e0c'/%3E%3Ccircle cx='16' cy='16' r='6.5' fill='none' stroke='%234ed9a4' stroke-width='2.4'/%3E%3Ccircle cx='16' cy='16' r='1.6' fill='%234ed9a4'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- shared SVG defs: arrowhead marker + lock icons, reused by every diagram -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-faint)"></path>
+    </marker>
+    <symbol id="lock-open" viewBox="0 0 24 24">
+      <path d="M7 10V7a5 5 0 0 1 9.5-2.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <rect x="4" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+      <circle cx="11" cy="15" r="1.4" fill="currentColor"/>
+    </symbol>
+    <symbol id="lock-closed" viewBox="0 0 24 24">
+      <path d="M7 10V8a5 5 0 0 1 10 0v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <rect x="4" y="10" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+      <circle cx="12" cy="15" r="1.4" fill="currentColor"/>
+    </symbol>
+    <symbol id="device-phone" viewBox="0 0 24 24">
+      <rect x="6" y="2" width="12" height="20" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <circle cx="12" cy="18.3" r="1" fill="currentColor"/>
+    </symbol>
+    <symbol id="device-laptop" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="12" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M1.5 19h21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="check-badge" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="warn-badge" viewBox="0 0 24 24">
+      <path d="M12 3.5 21.5 20h-19z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <line x1="12" y1="10" x2="12" y2="14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="12" cy="17.2" r="1.05" fill="currentColor"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="topbar__brand">
+    <span class="dot" aria-hidden="true"></span>
+    Verification, unconfused
+  </div>
+  <nav class="topbar__nav" aria-label="Section navigation" id="topnav">
+    <a href="#cast">Cast</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#meanings">Six meanings</a>
+    <a href="#flows">Walkthroughs</a>
+    <a href="#hack">The DB hack</a>
+    <a href="#admin">Admin can/can't</a>
+    <a href="#deadline">The deadline</a>
+    <a href="#glossary">Glossary</a>
+    <a href="#sources">Sources</a>
+  </nav>
+  <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false">
+    <span id="themeIcon" aria-hidden="true">◐</span><span id="themeLabel">Auto</span>
+  </button>
+</header>
+
+<main id="main">
+
+<!-- ===================== HERO ===================== -->
+<section class="hero">
+  <svg class="hero__mesh" viewBox="0 0 1200 500" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <pattern id="lattice" width="120" height="104" patternUnits="userSpaceOnUse">
+        <g fill="none" stroke="var(--line)" stroke-width="1">
+          <path d="M0 26 L30 8 L60 26 L60 60 L30 78 L0 60 Z"/>
+          <path d="M60 26 L90 8 L120 26 L120 60 L90 78 L60 60 Z"/>
+        </g>
+        <circle cx="30" cy="8" r="2" fill="var(--accent)" opacity="0.55"/>
+        <circle cx="90" cy="8" r="2" fill="var(--ink-faint)"/>
+        <circle cx="60" cy="60" r="2" fill="var(--ink-faint)"/>
+        <circle cx="0" cy="60" r="2" fill="var(--ink-faint)"/>
+        <circle cx="120" cy="60" r="2" fill="var(--accent)" opacity="0.4"/>
+      </pattern>
+      <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--bg)" stop-opacity="0"/>
+        <stop offset="100%" stop-color="var(--bg)" stop-opacity="1"/>
+      </linearGradient>
+    </defs>
+    <rect width="1200" height="500" fill="url(#lattice)"/>
+    <rect width="1200" height="500" fill="url(#fade)"/>
+  </svg>
+
+  <div class="hero__inner">
+    <div>
+      <p class="eyebrow"><span class="idx">§0</span> A field guide for one very confusing app badge</p>
+      <h1>Why does Element keep telling you <span class="accent">something isn't verified?</span></h1>
+      <p class="lede">Matrix's end-to-end encryption is genuinely well designed — which is exactly why the UI can't just "turn it off" for you. This guide walks through what's actually being checked, in plain language, with real diagrams, so the next warning banner tells you something instead of just nagging you.</p>
+      <div class="hero__meta">
+        <span><strong>Reads in</strong> ~18 min, skimmable</span>
+        <span><strong>Level</strong> zero assumed knowledge</span>
+        <span><strong>Grounded in</strong> Synapse &amp; Element Web source, not vibes</span>
+      </div>
+    </div>
+
+    <div class="stack" aria-label="Live micro-demo: what verified actually means">
+      <div class="diagram-frame no-min" style="padding:1.1rem 1.2rem;">
+        <svg id="microDemo" viewBox="0 0 320 150" role="img" aria-labelledby="microDemoTitle">
+          <title id="microDemoTitle">Two devices comparing keys</title>
+          <g id="md-a">
+            <rect x="14" y="30" width="110" height="90" rx="4" class="n-box"></rect>
+            <use href="#device-phone" x="58" y="42" width="22" height="22" color="var(--key-local)"></use>
+            <text x="69" y="86" text-anchor="middle" class="n-label">Your phone</text>
+            <text x="69" y="102" text-anchor="middle" class="n-sub" id="md-a-state">checking…</text>
+          </g>
+          <g id="md-b">
+            <rect x="196" y="30" width="110" height="90" rx="4" class="n-box"></rect>
+            <use href="#device-laptop" x="240" y="44" width="22" height="18" color="var(--key-local)"></use>
+            <text x="251" y="86" text-anchor="middle" class="n-label">Your laptop</text>
+            <text x="251" y="102" text-anchor="middle" class="n-sub" id="md-b-state">checking…</text>
+          </g>
+          <line x1="124" y1="75" x2="196" y2="75" class="n-edge" id="md-edge" marker-end="url(#arrow)" marker-start="url(#arrow)"></line>
+          <text x="160" y="65" text-anchor="middle" class="n-sub" id="md-caption" font-style="normal">keys match?</text>
+        </svg>
+      </div>
+      <button class="btn btn--primary" id="microDemoBtn" type="button">Compare keys</button>
+      <p class="mono" style="color:var(--ink-faint); font-size:0.78rem; margin:0;">This is the entire idea. Everything below is detail on top of this one comparison.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== §1 CAST OF CHARACTERS ===================== -->
+<section class="band" id="cast">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="idx">§1</span> First, the cast of characters</p>
+      <h2>Four names people mix up constantly</h2>
+      <p class="dek">"Matrix," "Element," and "Synapse" get used interchangeably, but they're three different layers — plus your devices, which hold the one thing none of the others ever see.</p>
+    </div>
+
+    <div class="cast-grid">
+      <div class="cast-card">
+        <div class="who"><span class="swatch" style="background:var(--ink-dim)"></span>Matrix</div>
+        <div class="role">The protocol (a rulebook)</div>
+        <div class="what">An open specification for how chat messages, rooms, and encryption keys move between servers and apps. Matrix itself has no servers or apps of its own — it's the rules everyone else follows.</div>
+      </div>
+      <div class="cast-card">
+        <div class="who"><span class="swatch" style="background:var(--key-server)"></span>Synapse</div>
+        <div class="role">A homeserver (the mail room)</div>
+        <div class="what">The server software that stores rooms, routes messages, and relays encrypted key material between your devices. It's one implementation of "Matrix" — the one this guide's research focused on.</div>
+      </div>
+      <div class="cast-card">
+        <div class="who"><span class="swatch" style="background:var(--ink)"></span>Element</div>
+        <div class="role">A client (the app you open)</div>
+        <div class="what">The app — web, desktop, or mobile — that talks to your homeserver on your behalf. It's where every "verify this session" banner actually lives; Synapse never renders UI.</div>
+      </div>
+      <div class="cast-card">
+        <div class="who"><span class="swatch" style="background:var(--key-local)"></span>Your devices</div>
+        <div class="role">Where the actual secrets live</div>
+        <div class="what">Every phone, laptop, and browser tab you've logged in on generates its own private keys, on-device. This guide is mostly about how those devices learn to trust each other.</div>
+      </div>
+    </div>
+
+    <p class="measure" style="margin-top:1.6rem; color:var(--ink-dim);">One sentence to hold onto for the rest of this page: <strong style="color:var(--ink)">Synapse moves things around; only your devices can prove who they are.</strong> Everything confusing about verification comes back to that one fact.</p>
+  </div>
+</section>
+
+<!-- ===================== §2 ARCHITECTURE ===================== -->
+<section class="band band--panel" id="architecture">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="idx">§2</span> The architecture</p>
+      <h2>What lives where</h2>
+      <p class="dek">Three kinds of data flow through Synapse. Two are things Synapse can read (they're not secret). One is a locked box Synapse only carries — it can't see inside, no matter who's asking.</p>
+    </div>
+
+    <div class="diagram-frame">
+      <svg viewBox="0 0 1080 480" role="img" aria-labelledby="archTitle archDesc">
+        <title id="archTitle">Architecture diagram of devices, Element, and Synapse</title>
+        <desc id="archDesc">Your devices hold private keys that never leave them. Element relays traffic between devices and Synapse. Synapse stores public keys and signatures in the open, and stores secret storage and key backup only as encrypted blobs it cannot read.</desc>
+
+        <!-- devices column -->
+        <g>
+          <rect x="20" y="30" width="230" height="420" rx="6" fill="none" stroke="var(--line)" stroke-dasharray="4 4"></rect>
+          <text x="135" y="20" text-anchor="middle" class="n-label" style="font-size:11px; letter-spacing:0.06em;">YOUR DEVICES</text>
+
+          <rect x="40" y="60" width="190" height="110" rx="4" class="n-box"></rect>
+          <use href="#device-phone" x="58" y="72" width="24" height="24" color="var(--ink-dim)"></use>
+          <text x="100" y="90" class="n-label">Phone</text>
+          <rect x="58" y="102" width="150" height="50" rx="3" fill="none" stroke="var(--key-local)" stroke-width="1.4"></rect>
+          <use href="#lock-closed" x="66" y="112" width="16" height="16" color="var(--key-local)"></use>
+          <text x="90" y="124" class="n-sub" font-style="normal" fill="var(--key-local)" font-size="10.5">Private identity key</text>
+          <text x="90" y="140" class="n-sub" font-style="normal" fill="var(--key-local)" font-size="10.5">Cross-signing keys (if cached)</text>
+
+          <rect x="40" y="190" width="190" height="110" rx="4" class="n-box"></rect>
+          <use href="#device-laptop" x="58" y="204" width="24" height="20" color="var(--ink-dim)"></use>
+          <text x="100" y="220" class="n-label">Laptop</text>
+          <rect x="58" y="232" width="150" height="50" rx="3" fill="none" stroke="var(--key-local)" stroke-width="1.4"></rect>
+          <use href="#lock-closed" x="66" y="242" width="16" height="16" color="var(--key-local)"></use>
+          <text x="90" y="254" class="n-sub" font-style="normal" fill="var(--key-local)" font-size="10.5">Private identity key</text>
+          <text x="90" y="270" class="n-sub" font-style="normal" fill="var(--key-local)" font-size="10.5">Cross-signing keys (if cached)</text>
+
+          <rect x="40" y="320" width="190" height="90" rx="4" class="n-box" stroke-dasharray="3 3"></rect>
+          <text x="135" y="345" text-anchor="middle" class="n-label" font-size="11">Recovery key</text>
+          <text x="135" y="362" text-anchor="middle" class="n-sub" font-style="normal" font-size="10.5">a secret only you hold —</text>
+          <text x="135" y="377" text-anchor="middle" class="n-sub" font-style="normal" font-size="10.5">on paper, not on any server</text>
+        </g>
+
+        <!-- element conduit -->
+        <g>
+          <rect x="280" y="200" width="130" height="60" rx="30" fill="none" stroke="var(--line)"></rect>
+          <text x="345" y="225" text-anchor="middle" class="n-label" font-size="11">Element</text>
+          <text x="345" y="241" text-anchor="middle" class="n-sub" font-style="italic" font-size="10">relays + computes trust</text>
+          <line x1="230" y1="115" x2="280" y2="220" class="n-edge" marker-end="url(#arrow)"></line>
+          <line x1="230" y1="245" x2="280" y2="230" class="n-edge" marker-end="url(#arrow)"></line>
+          <line x1="410" y1="230" x2="460" y2="230" class="n-edge" marker-end="url(#arrow)"></line>
+        </g>
+
+        <!-- synapse column -->
+        <g>
+          <rect x="460" y="30" width="600" height="420" rx="6" fill="none" stroke="var(--line)" stroke-dasharray="4 4"></rect>
+          <text x="760" y="20" text-anchor="middle" class="n-label" style="font-size:11px; letter-spacing:0.06em;">SYNAPSE (YOUR HOMESERVER)</text>
+
+          <rect x="480" y="55" width="560" height="110" rx="4" class="n-box" stroke="var(--key-server)"></rect>
+          <use href="#lock-open" x="496" y="68" width="20" height="20" color="var(--key-server)"></use>
+          <text x="526" y="83" class="n-label" font-size="12.5">Public keys &amp; signatures — visible, math-checked</text>
+          <text x="500" y="105" class="n-sub" font-style="normal" font-size="10.8">Tables: <tspan class="mono" fill="var(--ink-dim)">e2e_device_keys_json</tspan>, <tspan class="mono" fill="var(--ink-dim)">e2e_cross_signing_keys</tspan>,</text>
+          <text x="500" y="121" class="n-sub" font-style="normal" font-size="10.8"><tspan class="mono" fill="var(--ink-dim)">e2e_cross_signing_signatures</tspan> — opaque blobs, no "verified" column</text>
+          <text x="500" y="145" class="n-sub" font-size="10.8">Anyone can read these. That's fine — they're signed, not secret.</text>
+
+          <rect x="480" y="185" width="270" height="130" rx="4" class="n-box" stroke="var(--key-server)"></rect>
+          <use href="#lock-closed" x="496" y="198" width="20" height="20" color="var(--key-server)"></use>
+          <text x="526" y="213" class="n-label" font-size="12">Secret storage ("4S")</text>
+          <text x="500" y="234" class="n-sub" font-style="normal" font-size="10.5">account data: <tspan class="mono" fill="var(--ink-dim)">m.secret_storage.*</tspan></text>
+          <text x="500" y="252" class="n-sub" font-style="normal" font-size="10.5">holds your cross-signing private</text>
+          <text x="500" y="267" class="n-sub" font-style="normal" font-size="10.5">keys + backup key — but encrypted</text>
+          <text x="500" y="282" class="n-sub" font-style="normal" font-size="10.5">client-side first. Synapse stores</text>
+          <text x="500" y="297" class="n-sub" font-style="normal" font-size="10.5">ciphertext only.</text>
+
+          <rect x="770" y="185" width="270" height="130" rx="4" class="n-box" stroke="var(--key-server)"></rect>
+          <use href="#lock-closed" x="786" y="198" width="20" height="20" color="var(--key-server)"></use>
+          <text x="816" y="213" class="n-label" font-size="12">Key backup</text>
+          <text x="790" y="234" class="n-sub" font-style="normal" font-size="10.5">event type: <tspan class="mono" fill="var(--ink-dim)">m.megolm_backup.v1</tspan></text>
+          <text x="790" y="252" class="n-sub" font-style="normal" font-size="10.5">your encrypted <tspan font-style="italic">message</tspan> keys,</text>
+          <text x="790" y="267" class="n-sub" font-style="normal" font-size="10.5">so history survives a lost device.</text>
+          <text x="790" y="282" class="n-sub" font-style="normal" font-size="10.5">"Completely opaque to the</text>
+          <text x="790" y="297" class="n-sub" font-style="normal" font-size="10.5">handler," per Synapse's own code.</text>
+
+          <rect x="480" y="345" width="560" height="80" rx="4" fill="none" stroke="var(--danger)" stroke-dasharray="3 3"></rect>
+          <text x="760" y="372" text-anchor="middle" class="n-label" font-size="12" fill="var(--danger)">No table anywhere in here says "this device is verified."</text>
+          <text x="760" y="392" text-anchor="middle" class="n-sub" font-size="10.8">Trust is computed fresh, client-side, from the signatures above — every time. See §5.</text>
+        </g>
+
+        <line x1="135" y1="410" x2="480" y2="240" class="n-edge" stroke-dasharray="3 3" marker-end="url(#arrow)"></line>
+        <text x="270" y="380" text-anchor="middle" class="n-sub" font-size="10" fill="var(--ink-faint)">encrypted copy, only</text>
+        <text x="270" y="393" text-anchor="middle" class="n-sub" font-size="10" fill="var(--ink-faint)">your recovery key opens it</text>
+      </svg>
+    </div>
+    <div class="diagram-caption">
+      <span class="legend">
+        <span class="legend__item"><span class="legend__swatch" style="background:var(--key-local)"></span>Exists only on your devices</span>
+        <span class="legend__item"><span class="legend__swatch" style="background:var(--key-server); opacity:0.6"></span>Public / signed (server can read)</span>
+        <span class="legend__item"><span class="legend__swatch" style="background:var(--bg-inset); border-color:var(--key-server)"></span>Encrypted blob (server can carry, not read)</span>
+      </span>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== §3 SIX MEANINGS ===================== -->
+<section class="band" id="meanings">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="idx">§3</span> Untangling the vocabulary</p>
+      <h2>Six different things all called "verified"</h2>
+      <p class="dek">This is the real root cause of the confusion: Element and Synapse reuse "account," "verify," and "trust" for at least six separate mechanisms. Here's each one, in plain language, with who actually checks it.</p>
+    </div>
+
+    <div class="concept-grid">
+      <div class="concept-card">
+        <div class="concept-card__head"><h3>Account verification</h3><span class="num">1</span></div>
+        <p>Proving you own an email address or phone number, usually at sign-up or password reset. Ordinary web-account stuff — no cryptography, no devices involved.</p>
+        <div class="verdict serverside">Checked by: the server</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-card__head"><h3>Device / session verification</h3><span class="num">2</span></div>
+        <p>A cryptographic claim that <em>this specific device</em>'s keys are attested by the same identity as your other devices. This is what "Verify this session" is actually about.</p>
+        <div class="verdict crypto">Checked by: your client, from signatures</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-card__head"><h3>Cross-signing</h3><span class="num">3</span></div>
+        <p>The signature graph underneath #2: a master key signs a self-signing key (vouches for your own devices) and a user-signing key (vouches for other people's identities).</p>
+        <div class="verdict crypto">Checked by: your client, pure math</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-card__head"><h3>Secret storage ("4S") / recovery</h3><span class="num">4</span></div>
+        <p>An encrypted lockbox on the server holding your cross-signing private keys, so a new device can recover them with a recovery key instead of needing another device online.</p>
+        <div class="verdict mixed">Server carries it, cannot read it</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-card__head"><h3>Key backup</h3><span class="num">5</span></div>
+        <p>A separate encrypted lockbox — this one for your <em>message</em> keys, so encrypted chat history survives you losing a device. Different key, different purpose, same "server can't read it" property.</p>
+        <div class="verdict mixed">Server carries it, cannot read it</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-card__head"><h3>Server-side account status</h3><span class="num">6</span></div>
+        <p>Moderation/lifecycle flags an admin sets — deactivated, locked, suspended. Real admin power, zero connection to cryptographic trust. Easy to conflate with #2 because both use the word "account."</p>
+        <div class="verdict serverside">Checked by: the server</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== §4 FLOWS ===================== -->
+<section class="band band--panel" id="flows">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="idx">§4</span> Walk through it yourself</p>
+      <h2>Four moments, step by step</h2>
+      <p class="dek">Click through each one. These are traced directly from Element Web's actual verification logic, not a simplified paraphrase.</p>
+    </div>
+
+    <div class="flow-tabs" role="tablist" aria-label="Choose a walkthrough">
+      <button type="button" role="tab" aria-selected="true" data-target="flow-1" class="active">1. First login</button>
+      <button type="button" role="tab" aria-selected="false" data-target="flow-2">2. A new device logs in</button>
+      <button type="button" role="tab" aria-selected="false" data-target="flow-3">3. Verify vs. recovery vs. reset</button>
+      <button type="button" role="tab" aria-selected="false" data-target="flow-4">4. Which alert fires, and why</button>
+    </div>
+
+    <!-- FLOW 1: first login -->
+    <div class="flow-panel active" id="flow-1" role="tabpanel">
+      <div class="flow" data-flow>
+        <div class="flow__stage">
+          <svg viewBox="0 0 1160 220" role="img" aria-label="Diagram: first login on a brand new account">
+            <g class="step" data-step="0" data-emphasis="on">
+              <rect x="10" y="60" width="140" height="90" rx="4" class="n-box"></rect>
+              <text x="80" y="98" text-anchor="middle" class="n-label">Create</text>
+              <text x="80" y="114" text-anchor="middle" class="n-label">account</text>
+            </g>
+            <line x1="150" y1="105" x2="190" y2="105" class="n-edge" data-step="1" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="1">
+              <rect x="190" y="60" width="150" height="90" rx="4" class="n-box"></rect>
+              <text x="265" y="94" text-anchor="middle" class="n-label">Device makes</text>
+              <text x="265" y="110" text-anchor="middle" class="n-label">its own keys</text>
+            </g>
+            <line x1="340" y1="105" x2="380" y2="105" class="n-edge" data-step="2" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="2">
+              <rect x="380" y="60" width="160" height="90" rx="4" class="n-box"></rect>
+              <text x="460" y="94" text-anchor="middle" class="n-label">Create cross-</text>
+              <text x="460" y="110" text-anchor="middle" class="n-label">signing identity</text>
+            </g>
+            <line x1="540" y1="105" x2="580" y2="105" class="n-edge" data-step="3" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="3">
+              <rect x="580" y="60" width="160" height="90" rx="4" class="n-box"></rect>
+              <text x="660" y="94" text-anchor="middle" class="n-label">Upload public</text>
+              <text x="660" y="110" text-anchor="middle" class="n-label">keys + signatures</text>
+            </g>
+            <line x1="740" y1="105" x2="780" y2="105" class="n-edge" data-step="4" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="4">
+              <rect x="780" y="60" width="160" height="90" rx="4" class="n-box"></rect>
+              <text x="860" y="94" text-anchor="middle" class="n-label">Set up recovery</text>
+              <text x="860" y="110" text-anchor="middle" class="n-label">key (secret storage)</text>
+            </g>
+            <line x1="940" y1="105" x2="980" y2="105" class="n-edge" data-step="5" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="5" data-emphasis="on">
+              <rect x="980" y="60" width="170" height="90" rx="4" class="n-box"></rect>
+              <use href="#check-badge" x="1053" y="70" width="24" height="24" color="var(--accent)"></use>
+              <text x="1065" y="122" text-anchor="middle" class="n-label">This session:</text>
+              <text x="1065" y="138" text-anchor="middle" class="n-label">verified</text>
+            </g>
+            <text x="580" y="190" text-anchor="middle" class="n-sub" font-size="11">There's only one device so far — it's automatically the root of trust. No alert fires here.</text>
+          </svg>
+        </div>
+        <div class="flow__caption">
+          <span class="step-no">1</span>
+          <div class="txt"></div>
+        </div>
+        <div class="flow__controls">
+          <button class="btn prev" type="button">← Back</button>
+          <div class="flow__dots"></div>
+          <button class="btn btn--primary next" type="button">Next →</button>
+        </div>
+      </div>
+      <ol class="flow-steps" hidden>
+        <li><h4>Create your account</h4><p>Ordinary sign-up: username, password, maybe an email. No cryptography has happened yet — this is meaning #1 and #6 from §3, not device verification.</p></li>
+        <li><h4>Your device generates its own keys</h4><p>Element (via matrix-js-sdk's Rust crypto engine) creates a device identity keypair, entirely on-device. The private half never leaves it.</p></li>
+        <li><h4>Cross-signing identity is created</h4><p>A master key, a self-signing key, and a user-signing key are generated locally — the root of trust that will later let other devices and other people recognize you.</p></li>
+        <li><h4>Public keys and signatures go to Synapse</h4><p>Only the public halves, plus signatures proving they belong together, are uploaded. Synapse validates the signatures are well-formed and stores them — see §2's "public &amp; signed" compartment.</p></li>
+        <li><h4>Recovery key / secret storage is set up</h4><p>Your cross-signing <em>private</em> keys get encrypted with a recovery key you keep, then that ciphertext is stored server-side as "secret storage." Skipping this step is the single biggest cause of repeat nagging later — see §6.</p></li>
+        <li><h4>Result: verified, trivially</h4><p>With one device and no one else to compare against yet, you're automatically the root of trust. The real test comes with device #2 — next tab.</p></li>
+      </ol>
+    </div>
+
+    <!-- FLOW 2: new device -->
+    <div class="flow-panel" id="flow-2" role="tabpanel" hidden>
+      <div class="flow" data-flow>
+        <div class="flow__stage">
+          <svg viewBox="0 0 1160 240" role="img" aria-label="Diagram: logging in on a second device">
+            <g class="step" data-step="0" data-emphasis="on">
+              <rect x="10" y="70" width="150" height="90" rx="4" class="n-box"></rect>
+              <text x="85" y="108" text-anchor="middle" class="n-label">Log in with</text>
+              <text x="85" y="124" text-anchor="middle" class="n-label">password</text>
+            </g>
+            <line x1="160" y1="115" x2="200" y2="115" class="n-edge" data-step="1" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="1">
+              <rect x="200" y="70" width="160" height="90" rx="4" class="n-box"></rect>
+              <text x="280" y="104" text-anchor="middle" class="n-label">New device makes</text>
+              <text x="280" y="120" text-anchor="middle" class="n-label">its own new keys</text>
+            </g>
+            <line x1="360" y1="115" x2="400" y2="115" class="n-edge" data-step="2" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="2" data-emphasis="warn">
+              <rect x="400" y="70" width="180" height="90" rx="4" class="n-box"></rect>
+              <use href="#warn-badge" x="546" y="80" width="22" height="22" color="var(--warn)"></use>
+              <text x="490" y="104" text-anchor="middle" class="n-label">Alert:</text>
+              <text x="490" y="120" text-anchor="middle" class="n-label">"Verify this session"</text>
+            </g>
+            <line x1="580" y1="115" x2="620" y2="60" class="n-edge" data-step="3" marker-end="url(#arrow)"></line>
+            <line x1="580" y1="115" x2="620" y2="170" class="n-edge" data-step="3" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="3">
+              <rect x="620" y="20" width="180" height="80" rx="4" class="n-box"></rect>
+              <text x="710" y="52" text-anchor="middle" class="n-label">Path A: compare</text>
+              <text x="710" y="68" text-anchor="middle" class="n-label">emoji with another device</text>
+            </g>
+            <g class="step" data-step="3">
+              <rect x="620" y="130" width="180" height="80" rx="4" class="n-box"></rect>
+              <text x="710" y="162" text-anchor="middle" class="n-label">Path B: type in your</text>
+              <text x="710" y="178" text-anchor="middle" class="n-label">recovery key</text>
+            </g>
+            <line x1="800" y1="60" x2="850" y2="105" class="n-edge" data-step="4" marker-end="url(#arrow)"></line>
+            <line x1="800" y1="170" x2="850" y2="115" class="n-edge" data-step="4" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="4">
+              <rect x="850" y="70" width="150" height="90" rx="4" class="n-box"></rect>
+              <text x="925" y="104" text-anchor="middle" class="n-label">Signatures made</text>
+              <text x="925" y="120" text-anchor="middle" class="n-label">or keys recovered</text>
+            </g>
+            <line x1="1000" y1="115" x2="1030" y2="115" class="n-edge" data-step="5" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="5" data-emphasis="on">
+              <rect x="1030" y="70" width="120" height="90" rx="4" class="n-box"></rect>
+              <use href="#check-badge" x="1075" y="80" width="24" height="24" color="var(--accent)"></use>
+              <text x="1090" y="130" text-anchor="middle" class="n-label">Trusted</text>
+            </g>
+          </svg>
+        </div>
+        <div class="flow__caption">
+          <span class="step-no">1</span>
+          <div class="txt"></div>
+        </div>
+        <div class="flow__controls">
+          <button class="btn prev" type="button">← Back</button>
+          <div class="flow__dots"></div>
+          <button class="btn btn--primary next" type="button">Next →</button>
+        </div>
+      </div>
+      <ol class="flow-steps" hidden>
+        <li><h4>Same password, new device</h4><p>Matrix accounts aren't tied to one machine — logging in on a new phone or browser is completely normal and expected.</p></li>
+        <li><h4>The new device is a stranger, cryptographically</h4><p>It generates its own fresh keys. Nothing about them is inherently connected to your other devices yet — they need to be vouched for.</p></li>
+        <li><h4>Element notices and nags you</h4><p>This is Element's <code>DeviceListener</code> doing its job: this device isn't cross-signed yet, so it shows "Verify this session." This is meaning #2 from §3, working as intended — not a bug.</p></li>
+        <li><h4>Two ways to resolve it</h4><p><strong>Path A</strong> needs another already-verified device online: both devices compare a short row of emoji (or scan a QR code) and confirm they match. <strong>Path B</strong> needs your recovery key: it decrypts your existing cross-signing private key straight from secret storage, no other device required.</p></li>
+        <li><h4>Trust is established</h4><p>Path A produces a fresh cross-signature between the two devices. Path B recovers the exact same private key your other devices already trust. Either way, only a signature or a locally-decrypted key moves — never anything Synapse can read.</p></li>
+        <li><h4>Result: this device is now trusted</h4><p>The toast disappears. Other people who'd verified you before will now see this device as trusted too, automatically, via the signature chain.</p></li>
+      </ol>
+    </div>
+
+    <!-- FLOW 3: verify vs recovery vs reset -->
+    <div class="flow-panel" id="flow-3" role="tabpanel" hidden>
+      <div class="flow" data-flow>
+        <div class="flow__stage">
+          <svg viewBox="0 0 1160 200" role="img" aria-label="Diagram: verification, recovery, and reset compared">
+            <g class="step" data-step="0" data-emphasis="on">
+              <rect x="10" y="55" width="190" height="90" rx="4" class="n-box"></rect>
+              <text x="105" y="90" text-anchor="middle" class="n-label">Devices compare</text>
+              <text x="105" y="106" text-anchor="middle" class="n-label">short emoji sequence</text>
+            </g>
+            <line x1="200" y1="100" x2="240" y2="100" class="n-edge" data-step="1" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="1">
+              <rect x="240" y="55" width="190" height="90" rx="4" class="n-box"></rect>
+              <text x="335" y="90" text-anchor="middle" class="n-label">Match → devices</text>
+              <text x="335" y="106" text-anchor="middle" class="n-label">sign each other's keys</text>
+            </g>
+            <line x1="430" y1="100" x2="470" y2="100" class="n-edge" data-step="2" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="2">
+              <rect x="470" y="55" width="190" height="90" rx="4" class="n-box"></rect>
+              <text x="565" y="90" text-anchor="middle" class="n-label">Only the signature</text>
+              <text x="565" y="106" text-anchor="middle" class="n-label">is uploaded, publicly</text>
+            </g>
+            <line x1="660" y1="100" x2="700" y2="100" class="n-edge" data-step="3" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="3">
+              <rect x="700" y="55" width="200" height="90" rx="4" class="n-box"></rect>
+              <text x="800" y="82" text-anchor="middle" class="n-label">Recovery key instead:</text>
+              <text x="800" y="98" text-anchor="middle" class="n-label">decrypts your OWN key</text>
+              <text x="800" y="114" text-anchor="middle" class="n-label">from secret storage</text>
+            </g>
+            <line x1="900" y1="100" x2="940" y2="100" class="n-edge" data-step="4" marker-end="url(#arrow)"></line>
+            <g class="step" data-step="4" data-emphasis="danger">
+              <rect x="940" y="30" width="200" height="140" rx="4" class="n-box"></rect>
+              <text x="1040" y="60" text-anchor="middle" class="n-label">Lost key + no other</text>
+              <text x="1040" y="76" text-anchor="middle" class="n-label">device online?</text>
+              <text x="1040" y="100" text-anchor="middle" class="n-label" fill="var(--danger)">→ "Reset identity"</text>
+              <text x="1040" y="122" text-anchor="middle" class="n-sub" font-size="10.5">new keys, old history</text>
+              <text x="1040" y="136" text-anchor="middle" class="n-sub" font-size="10.5">unrecoverable</text>
+              <text x="1040" y="150" text-anchor="middle" class="n-sub" font-size="10.5">everyone re-verifies you</text>
+            </g>
+          </svg>
+        </div>
+        <div class="flow__caption">
+          <span class="step-no">1</span>
+          <div class="txt"></div>
+        </div>
+        <div class="flow__controls">
+          <button class="btn prev" type="button">← Back</button>
+          <div class="flow__dots"></div>
+          <button class="btn btn--primary next" type="button">Next →</button>
+        </div>
+      </div>
+      <ol class="flow-steps" hidden>
+        <li><h4>Emoji (or QR) comparison — "SAS" verification</h4><p>Two live devices show the same short sequence of emoji or scan a QR code. It's a human-friendly way to compare a cryptographic value without either device having to trust a server to do it.</p></li>
+        <li><h4>A match creates a real signature</h4><p>Once you both confirm the emoji matched, each device cryptographically signs the other's public key. That's the actual "verify" action — not a checkbox, a signature.</p></li>
+        <li><h4>Only the signature travels</h4><p>That signature is uploaded to Synapse as an ordinary, public, opaque blob (§2). It proves a fact happened; it reveals no secret.</p></li>
+        <li><h4>Recovery key does something different</h4><p>Instead of asking another device to vouch for you, a recovery key unlocks the <em>same private cross-signing key</em> your account has always had, straight out of secret storage. No live second device required.</p></li>
+        <li><h4>The dead end: reset identity</h4><p>If you've lost the recovery key <em>and</em> every other device is signed out, there is no way to recover the old private key — encryption doesn't have a back door. Element's "Reset cross-signing / reset encryption" flow starts over: new keys, and access to old encrypted history is gone unless it was in a working key backup.</p></li>
+      </ol>
+      <div class="callout callout--danger" style="margin-top:1.2rem;">
+        <span class="icon" aria-hidden="true">⚠</span>
+        <div><h4>Reset is a last resort, and it's yours alone to run</h4><p>An admin cannot do this reset for you and cannot skip it on your behalf — it requires your account password and runs entirely in your own client. After a reset, people who verified you before will see "digital identity changed" until they verify you again. That warning is the system working correctly, not a glitch to suppress.</p></div>
+      </div>
+    </div>
+
+    <!-- FLOW 4: alert waterfall -->
+    <div class="flow-panel" id="flow-4" role="tabpanel" hidden>
+      <div class="flow" data-flow>
+        <div class="flow__stage">
+          <svg viewBox="0 0 620 620" role="img" aria-label="Diagram: the order Element checks things in, and which alert each failure produces">
+            <g class="step" data-step="0" data-emphasis="warn">
+              <rect x="60" y="10" width="500" height="70" rx="4" class="n-box"></rect>
+              <text x="310" y="38" text-anchor="middle" class="n-label">Is THIS device cross-signed?</text>
+              <text x="310" y="58" text-anchor="middle" class="n-sub" font-size="11">no → <tspan fill="var(--warn)" font-style="normal">"Verify this device"</tspan></text>
+            </g>
+            <line x1="310" y1="80" x2="310" y2="110" class="n-edge" data-step="1" marker-end="url(#arrow)"></line>
+            <text x="340" y="98" class="n-sub" font-size="10">yes ↓</text>
+
+            <g class="step" data-step="1" data-emphasis="warn">
+              <rect x="60" y="110" width="500" height="80" rx="4" class="n-box"></rect>
+              <text x="310" y="138" text-anchor="middle" class="n-label">Are cross-signing secrets cached locally?</text>
+              <text x="310" y="158" text-anchor="middle" class="n-sub" font-size="11">no, but they exist in recovery → <tspan fill="var(--warn)" font-style="normal">"Key storage out of sync"</tspan></text>
+              <text x="310" y="175" text-anchor="middle" class="n-sub" font-size="11">no, and recovery is empty too → <tspan fill="var(--danger)" font-style="normal">"Identity needs reset"</tspan></text>
+            </g>
+            <line x1="310" y1="190" x2="310" y2="220" class="n-edge" data-step="2" marker-end="url(#arrow)"></line>
+            <text x="340" y="208" class="n-sub" font-size="10">yes ↓</text>
+
+            <g class="step" data-step="2" data-emphasis="warn">
+              <rect x="60" y="220" width="500" height="70" rx="4" class="n-box"></rect>
+              <text x="310" y="248" text-anchor="middle" class="n-label">Is key backup successfully uploading?</text>
+              <text x="310" y="268" text-anchor="middle" class="n-sub" font-size="11">no (and not deliberately off) → <tspan fill="var(--warn)" font-style="normal">"Turn on key storage"</tspan></text>
+            </g>
+            <line x1="310" y1="290" x2="310" y2="320" class="n-edge" data-step="3" marker-end="url(#arrow)"></line>
+            <text x="340" y="308" class="n-sub" font-size="10">yes ↓</text>
+
+            <g class="step" data-step="3" data-emphasis="warn">
+              <rect x="60" y="320" width="500" height="70" rx="4" class="n-box"></rect>
+              <text x="310" y="348" text-anchor="middle" class="n-label">Is recovery (secret storage) ready?</text>
+              <text x="310" y="368" text-anchor="middle" class="n-sub" font-size="11">no → <tspan fill="var(--warn)" font-style="normal">"Set up recovery"</tspan> / <tspan fill="var(--warn)" font-style="normal">"Key storage out of sync"</tspan></text>
+            </g>
+            <line x1="310" y1="390" x2="310" y2="420" class="n-edge" data-step="4" marker-end="url(#arrow)"></line>
+            <text x="340" y="408" class="n-sub" font-size="10">yes ↓</text>
+
+            <g class="step" data-step="4" data-emphasis="warn">
+              <rect x="60" y="420" width="500" height="70" rx="4" class="n-box"></rect>
+              <text x="310" y="448" text-anchor="middle" class="n-label">Can key backup be downloaded &amp; decrypted?</text>
+              <text x="310" y="468" text-anchor="middle" class="n-sub" font-size="11">no → <tspan fill="var(--warn)" font-style="normal">"Key storage out of sync"</tspan></text>
+            </g>
+            <line x1="310" y1="490" x2="310" y2="520" class="n-edge" data-step="5" marker-end="url(#arrow)"></line>
+            <text x="340" y="508" class="n-sub" font-size="10">yes ↓</text>
+
+            <g class="step" data-step="5" data-emphasis="on">
+              <rect x="150" y="520" width="320" height="70" rx="4" class="n-box"></rect>
+              <use href="#check-badge" x="180" y="538" width="24" height="24" color="var(--accent)"></use>
+              <text x="330" y="562" text-anchor="middle" class="n-label">All clear — no toast shown</text>
+            </g>
+          </svg>
+        </div>
+        <div class="flow__caption">
+          <span class="step-no">1</span>
+          <div class="txt"></div>
+        </div>
+        <div class="flow__controls">
+          <button class="btn prev" type="button">← Back</button>
+          <div class="flow__dots"></div>
+          <button class="btn btn--primary next" type="button">Next →</button>
+        </div>
+      </div>
+      <ol class="flow-steps" hidden>
+        <li><h4>Check 1 — is this device itself trusted?</h4><p>Element's listener asks first: does <em>this</em> session's own cross-signing status check out? If not, everything else is skipped and you get "Verify this device." This single check explains most of the nagging most people see.</p></li>
+        <li><h4>Check 2 — are the cross-signing secrets cached?</h4><p>Even a cross-signed device needs its private cross-signing keys loaded in memory/local storage. If they're missing but recoverable, you get a sync-mismatch warning; if they're missing everywhere, Element concludes your identity needs a reset.</p></li>
+        <li><h4>Check 3 — is key backup uploading?</h4><p>If you haven't explicitly turned backup off, Element expects it to be actively saving your message keys. A stalled upload produces its own distinct nudge.</p></li>
+        <li><h4>Check 4 — is recovery (secret storage) ready?</h4><p>This is the "have you actually finished setup" check — the one most easily fixed once, permanently, by completing recovery setup properly the first time (§6).</p></li>
+        <li><h4>Check 5 — can backup be read back?</h4><p>Last check: can the client actually decrypt the backed-up message keys? A "yes" up to here but a "no" now still shows a sync warning.</p></li>
+        <li><h4>Only one alert shows at a time</h4><p>This is a waterfall: the <em>first</em> failing check wins and its toast is shown; later checks aren't even reached. That's why the message you see can change from visit to visit — you're not seeing five bugs, you're seeing one check at a time.</p></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== §5 THE DATABASE HACK ===================== -->
+<section class="band" id="hack">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="idx">§5</span> The question everyone eventually asks</p>
+      <h2>Can you just... edit the database to make it say "verified"?</h2>
+      <p class="dek">Short answer: not the way you'd hope. Here's the precise version, because "no" alone isn't satisfying and isn't quite complete either.</p>
+    </div>
+
+    <div class="hack-tabs" role="tablist" aria-label="Which database do you mean?">
+      <button type="button" class="active" role="tab" aria-selected="true" data-hack="server">
+        <span class="t1">A · The Synapse database (server)</span>
+        <span class="t2">What an admin with root/DB access could touch</span>
+      </button>
+      <button type="button" role="tab" aria-selected="false" data-hack="local">
+        <span class="t1">B · Your browser's IndexedDB (local)</span>
+        <span class="t2">What "verified" means on just your own screen</span>
+      </button>
+    </div>
+
+    <div class="hack-panel active" id="hack-server" role="tabpanel">
+      <div class="table-inspector">
+        <table>
+          <caption>synapse/storage/schema — e2e_cross_signing_keys (simplified)</caption>
+          <thead>
+            <tr><th>user_id</th><th>keytype</th><th>keydata</th><th>stream_id</th><th>verified</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>@alice:example.org</td>
+              <td>master</td>
+              <td class="opaque">{"keys":{"ed25519:…":"…"},"signatures":{…}}</td>
+              <td>4821</td>
+              <td class="missing">— column does not exist —</td>
+            </tr>
+            <tr class="ghost">
+              <td>@alice:example.org</td>
+              <td>self_signing</td>
+              <td class="opaque">{"keys":{…},"signatures":{…}}</td>
+              <td>4822</td>
+              <td class="missing">— column does not exist —</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="measure" style="margin-top:1.2rem; color:var(--ink-dim);">This is the real, current schema — not a paraphrase. <code>keydata</code> is <em>public</em> key material plus a signature, both opaque blobs. There is no boolean anywhere in Synapse's schema that means "verified." An admin can't flip a switch that doesn't exist.</p>
+
+      <div class="fake-row-demo">
+        <p class="mono" style="color:var(--ink-dim); font-size:0.85rem; margin:0 0 0.9rem;">So what happens if an admin inserts a row anyway? A short, illustrative simulation — not a real crypto execution:</p>
+        <div class="fake-row-demo__log" id="fakeRowLog" aria-live="polite"></div>
+        <button class="btn btn--primary" id="fakeRowBtn" type="button" style="margin-top:1rem;">Run the simulation</button>
+      </div>
+
+      <div class="callout callout--uncertainty" style="margin-top:1.2rem;">
+        <span class="icon" aria-hidden="true">◐</span>
+        <div>
+          <h4>What's confirmed vs. what's uncertain</h4>
+          <p><strong style="color:var(--ink)">Confirmed by reading the source:</strong> the schema has no verified flag; upload endpoints cryptographically check signatures before storing them (bad signatures are rejected with <code>M_INVALID_SIGNATURE</code>); the one admin-adjacent cross-signing endpoint (<code>_allow_cross_signing_replacement_without_uia</code>, Synapse 1.97.0+) only waives a re-auth prompt for a user's <em>own</em> client to upload a brand-new, self-consistent key — it cannot implant trust in an existing device. A real historical bug (<a href="https://github.com/matrix-org/synapse/issues/16398" target="_blank" rel="noopener">synapse#16398</a>) let duplicate key rows pile up, but that's disk bloat, not a trust bypass.</p>
+          <p><strong style="color:var(--ink)">Genuinely uncertain:</strong> this is based on a source-level review of the current codebase and public issue history, not an exhaustive audit of every closed security advisory ever filed. I found no working exploit of this kind — but "I didn't find one" and "one has never existed" aren't the same claim.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="hack-panel" id="hack-local" role="tabpanel" hidden>
+      <div class="callout callout--warn">
+        <span class="icon" aria-hidden="true">⚠</span>
+        <div>
+          <h4>This one is real — and it only fools you</h4>
+          <p>matrix-js-sdk does have a local "trust this device" call — but it writes to <em>your own browser's</em> encrypted local store (IndexedDB), not to the server. There is no network request involved. It changes what your own client shows <em>you</em>. It changes nothing about what anyone else's client computes, because they never see your local database.</p>
+        </div>
+      </div>
+      <div class="diagram-frame no-min" style="margin-top:1.2rem;">
+        <svg viewBox="0 0 900 170" role="img" aria-label="Local trust only affects your own browser">
+          <rect x="20" y="30" width="260" height="110" rx="4" class="n-box on"></rect>
+          <text x="150" y="70" text-anchor="middle" class="n-label">Your browser</text>
+          <text x="150" y="90" text-anchor="middle" class="n-sub" font-size="11">IndexedDB: "trust this device"</text>
+          <text x="150" y="108" text-anchor="middle" class="n-sub" font-size="11">→ only YOUR UI turns green</text>
+          <line x1="280" y1="85" x2="360" y2="85" class="n-edge" stroke-dasharray="3 3"></line>
+          <text x="320" y="72" text-anchor="middle" class="n-sub" font-size="10">nothing is sent</text>
+          <rect x="360" y="30" width="260" height="110" rx="4" class="n-box" stroke="var(--ink-faint)"></rect>
+          <text x="490" y="70" text-anchor="middle" class="n-label" fill="var(--ink-faint)">Synapse</text>
+          <text x="490" y="90" text-anchor="middle" class="n-sub" font-size="11">unaware this happened</text>
+          <line x1="620" y1="85" x2="700" y2="85" class="n-edge" marker-end="url(#arrow)"></line>
+          <rect x="700" y="30" width="180" height="110" rx="4" class="n-box"></rect>
+          <text x="790" y="70" text-anchor="middle" class="n-label">Everyone else's</text>
+          <text x="790" y="86" text-anchor="middle" class="n-label">client</text>
+          <text x="790" y="106" text-anchor="middle" class="n-sub" font-size="11">still computes: unverified</text>
+        </svg>
+      </div>
+      <p class="measure" style="margin-top:1.1rem; color:var(--ink-dim);">This is why a screenshot of a green checkmark proves nothing to anyone but the person who took it. It's a real local override, with a real (if narrow) security consequence: it can lull <em>that one user</em> into trusting a device they never actually verified — but it cannot forge trust in anyone else's eyes.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== §6 ADMIN CAN / CANNOT ===================== -->
+<section class="band band--panel" id="admin">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="idx">§6</span> For whoever runs the homeserver</p>
+      <h2>What an admin can and can't do</h2>
+      <p class="dek">If you're self-hosting Synapse, here's the honest capability boundary, followed by what's actually worth doing about the UX.</p>
+    </div>
+
+    <div class="cancannot">
+      <div class="cancannot__col can">
+        <h3><span aria-hidden="true">✓</span> Can do</h3>
+        <ul>
+          <li><strong>List, rename, and delete</strong> devices via the admin API.</li>
+          <li><strong>Deactivate, lock, or suspend</strong> accounts (meaning #6 from §3).</li>
+          <li><strong>Force the verification workflow</strong> client-side with <code>force_verification</code> (below) — friction, not forgery.</li>
+          <li><strong>Destroy</strong> a user's cross-signing/secret-storage state, forcing them to redo setup from scratch.</li>
+          <li><strong>Grant a 10-minute UIA-free window</strong> for a user's own client to upload a new master key — only relevant if you delegate auth to Matrix Authentication Service.</li>
+        </ul>
+      </div>
+      <div class="cancannot__col cannot">
+        <h3><span aria-hidden="true">✕</span> Cannot do</h3>
+        <ul>
+          <li><strong>Mark</strong> a device or user as cryptographically verified — no such field exists to set.</li>
+          <li><strong>Grant trust on someone's behalf</strong> — it requires the private key material only their own devices (or their recovery key) hold.</li>
+          <li><strong>Read</strong> secret storage or key backup contents — both are encrypted before they ever reach the server.</li>
+          <li><strong>Bulk-verify</strong> an entire user base in one action, by design.</li>
+          <li><strong>Undo</strong> a user's identity reset for them, or skip it on their behalf.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section-head" style="margin-top:3rem;">
+      <p class="eyebrow">Remediation</p>
+      <h2>What's actually worth doing</h2>
+    </div>
+    <div class="remedy-list">
+      <div class="remedy">
+        <div class="remedy__rank">1</div>
+        <div><h3>Align client versions first</h3><p>Mixing very old (pre-Rust-crypto) clients with current ones is a documented source of stale, contradictory verification state. Keep mobile, desktop, and web current across your users.</p></div>
+      </div>
+      <div class="remedy">
+        <div class="remedy__rank">2</div>
+        <div><h3>Make recovery setup mandatory at first login</h3><p>A properly stored recovery key is what lets a brand-new session self-verify against secret storage instead of needing another device online. Skipping it is the actual root cause of most repeat nagging (§4, flow 4, check 4).</p></div>
+      </div>
+      <div class="remedy">
+        <div class="remedy__rank">3</div>
+        <div><h3>Turn on <code>force_verification</code></h3><p>Element Web's own config flag removes the "skip" button on first login, so setup completes immediately instead of leaving unresolved state to surface later as confusing toasts.</p>
+          <pre>// config.json
+{
+  "force_verification": true
+}</pre>
+        </div>
+      </div>
+      <div class="remedy">
+        <div class="remedy__rank">4</div>
+        <div><h3>Know the one real "reset" path — and its cost</h3><p>For a genuinely unrecoverable identity (lost recovery key, no other session), the only supported fix is the user's own client-side "Reset cross-signing / reset encryption" flow. It requires their password, cannot be run by an admin, and permanently loses access to any encrypted history that wasn't in a working key backup.</p></div>
+      </div>
+      <div class="remedy">
+        <div class="remedy__rank">5</div>
+        <div><h3>If a future audit script would help, keep it read-only</h3><p>The only defensible scope: enumerate (via the admin API) which accounts have never set up cross-signing at all, purely to target outreach ahead of the deadline below. Never a script that writes to any trust-related table — there is nothing there to write that would do anything.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== §7 THE DEADLINE ===================== -->
+<section class="band" id="deadline">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="idx">§7</span> Why this is worth fixing soon</p>
+      <h2>Element is about to start enforcing this</h2>
+    </div>
+    <div class="countdown">
+      <div class="countdown__num" id="countdownNum">—<span>days until enforcement</span></div>
+      <div>
+        <h3>Unverified sessions will stop sending and receiving encrypted messages</h3>
+        <p>Element Web already ships this exact string in its verification prompt: <cite>"As of end of October 2026, unverified devices will not be able to send and receive messages."</cite> Per Element's own announcement (originally slated for April 2026, pushed to October 2026), this is enforced client-side — not a Synapse setting you can toggle off. After the deadline, unverified sessions go effectively silent in encrypted rooms.</p>
+        <p style="margin-top:0.6rem;"><a href="https://element.io/blog/verifying-your-devices-is-becoming-mandatory-2/" target="_blank" rel="noopener">Element's announcement →</a></p>
+      </div>
+    </div>
+    <p class="measure" style="margin-top:1.2rem; color:var(--ink-dim);">For a self-hosted deployment, this is the actual deadline driving urgency — independent of anything a database could fix. It's worth running a "get everyone verified and recovery-key-configured" push well ahead of it, using §6's remediation list.</p>
+  </div>
+</section>
+
+<!-- ===================== GLOSSARY ===================== -->
+<section class="band band--panel" id="glossary">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Reference</p>
+      <h2>Glossary</h2>
+    </div>
+    <dl class="glossary">
+      <div class="glossary-item"><dt>Matrix</dt><dd>The open protocol/rulebook for decentralized chat and E2EE — not a company, app, or server by itself.</dd></div>
+      <div class="glossary-item"><dt>Synapse</dt><dd>The most common homeserver implementation of Matrix — the server software.</dd></div>
+      <div class="glossary-item"><dt>Element</dt><dd>A Matrix client app (web/desktop/mobile) built on matrix-js-sdk.</dd></div>
+      <div class="glossary-item"><dt>Device / session</dt><dd>One logged-in instance of a client — a phone, a browser tab, a desktop app each count separately.</dd></div>
+      <div class="glossary-item"><dt>Cross-signing</dt><dd>A signature graph (master, self-signing, user-signing keys) letting your devices and other people vouch for identities without a server in the loop.</dd></div>
+      <div class="glossary-item"><dt>Secret storage ("4S")</dt><dd>Server-hosted, client-encrypted storage for your cross-signing private keys and backup key.</dd></div>
+      <div class="glossary-item"><dt>Recovery key</dt><dd>The secret (key or passphrase) that decrypts secret storage. Never sent to the server in plaintext.</dd></div>
+      <div class="glossary-item"><dt>Key backup</dt><dd>Server-hosted, client-encrypted storage for your message (Megolm) decryption keys, so history survives a lost device.</dd></div>
+      <div class="glossary-item"><dt>SAS verification</dt><dd>"Short Authentication String" — the emoji/number comparison used for live, in-person device verification.</dd></div>
+      <div class="glossary-item"><dt>UIA</dt><dd>User-Interactive Auth — Matrix's term for re-confirming your password before a sensitive action.</dd></div>
+      <div class="glossary-item"><dt>Identity reset</dt><dd>Discarding your cross-signing keys and starting over. Destructive, client-side only, and not reversible.</dd></div>
+      <div class="glossary-item"><dt>MAS</dt><dd>Matrix Authentication Service — an optional OIDC-based auth delegate some Synapse deployments use instead of Synapse's own password auth.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- ===================== SOURCES ===================== -->
+<section class="band" id="sources">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Show your work</p>
+      <h2>Sources</h2>
+      <p class="dek">Every claim above traces back to one of these. No URLs were invented for this page.</p>
+    </div>
+    <ul class="source-list">
+      <li><span class="tag">Spec</span><div><a href="https://spec.matrix.org/latest/client-server-api/#cross-signing" target="_blank" rel="noopener">Matrix spec — Cross-signing</a><span class="note">Client-server API section defining master/self-signing/user-signing keys and client-side trust computation.</span></div></li>
+      <li><span class="tag">Spec (MSC)</span><div><a href="https://github.com/matrix-org/matrix-spec-proposals/blob/main/proposals/1946-secure_server-side_storage.md" target="_blank" rel="noopener">MSC1946 — Secure server-side storage</a><span class="note">The proposal defining secret storage / "4S".</span></div></li>
+      <li><span class="tag">Source</span><div><a href="https://github.com/element-hq/synapse" target="_blank" rel="noopener">github.com/element-hq/synapse</a><span class="note">Schema, handlers, and admin API inspected directly for §2, §5, §6.</span></div></li>
+      <li><span class="tag">Source</span><div><a href="https://github.com/element-hq/element-web" target="_blank" rel="noopener">github.com/element-hq/element-web</a><span class="note"><code>DeviceListener</code> and UI copy inspected directly for §4.</span></div></li>
+      <li><span class="tag">Source</span><div><a href="https://github.com/matrix-org/matrix-js-sdk" target="_blank" rel="noopener">github.com/matrix-org/matrix-js-sdk</a><span class="note">Cross-signing, secret storage, and verification API inspected for §3, §5.</span></div></li>
+      <li><span class="tag">Docs</span><div><a href="https://element-hq.github.io/synapse/latest/admin_api/user_admin_api.html" target="_blank" rel="noopener">Synapse admin API — user &amp; device management</a><span class="note">Confirms the device admin surface and the UIA-bypass endpoint's documented, narrow purpose.</span></div></li>
+      <li><span class="tag">Docs</span><div><a href="https://ems-docs.element.io/books/element-support/page/reset-cross-signing" target="_blank" rel="noopener">Element Support — Reset cross-signing</a><span class="note">Official steps and warnings for the identity-reset flow.</span></div></li>
+      <li><span class="tag">Blog</span><div><a href="https://element.io/blog/resetting-the-server-side-key-backup/" target="_blank" rel="noopener">Element — Resetting the server-side key backup</a><span class="note">When and why a backup reset is needed, distinct from cross-signing reset.</span></div></li>
+      <li><span class="tag">Blog</span><div><a href="https://element.io/blog/verifying-your-devices-is-becoming-mandatory-2/" target="_blank" rel="noopener">Element — Verifying your devices is becoming mandatory</a><span class="note">Source for the October 2026 enforcement deadline in §7.</span></div></li>
+      <li><span class="tag">Issue</span><div><a href="https://github.com/matrix-org/synapse/issues/16398" target="_blank" rel="noopener">synapse#16398 — duplicate cross-signing key rows</a><span class="note">The closest real historical wrinkle discussed in §5: disk bloat, not a trust bypass.</span></div></li>
+      <li><span class="tag">Issue</span><div><a href="https://github.com/element-hq/element-web/issues/29145" target="_blank" rel="noopener">element-web#29145 — stale toast on unverified session</a><span class="note">Real example of version-mismatch confusion referenced in §6.</span></div></li>
+      <li><span class="tag">Issue</span><div><a href="https://github.com/element-hq/element-web/issues/28977" target="_blank" rel="noopener">element-web#28977 — "reset cryptographic identity" flow</a><span class="note">In-progress unified reset UX referenced in §4/§6.</span></div></li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <p>Independent research summary — not official Matrix.org or Element documentation. Built for one specific self-hosted deployment's support docs. · <a href="#main">Back to top</a></p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
